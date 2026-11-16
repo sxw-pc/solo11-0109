@@ -43,6 +43,8 @@ def main():
     pp=s.add_parser('payout-plan');pp.add_argument('--db',required=True);pp.add_argument('--run',type=int,required=True);pp.add_argument('--merchant',required=True)
     ap=s.add_parser('payout-approve');ap.add_argument('--db',required=True);ap.add_argument('--plan',type=int,required=True)
     ps=s.add_parser('payout-status');ps.add_argument('--db',required=True);ps.add_argument('--plan',type=int,required=True)
+    st=s.add_parser('statement-issue');st.add_argument('--db',required=True);st.add_argument('--id',required=True);st.add_argument('--run',type=int,required=True);st.add_argument('--merchant',required=True);st.add_argument('--recipient',required=True)
+    st=s.add_parser('statement-show');st.add_argument('--db',required=True);st.add_argument('--id',required=True)
     a=p.parse_args()
     if a.cmd=='demo':print(demo(a.workdir))
     elif a.cmd=='demo-decisions':print(decision_demo(a.workdir))
@@ -56,5 +58,11 @@ def main():
     elif a.cmd=='payout-plan':print(plan_payout(a.db,a.run,a.merchant))
     elif a.cmd=='payout-approve':approve_payout(a.db,a.plan)
     elif a.cmd=='payout-status':print(payout_status(a.db,a.plan))
+    elif a.cmd=='statement-issue':
+        from .statement import issue
+        print(issue(a.db,a.id,a.run,a.merchant,a.recipient))
+    elif a.cmd=='statement-show':
+        from .statement import show
+        print(show(a.db,a.id))
     else:print(write(a.db,a.run,a.out))
 if __name__=='__main__':main()
