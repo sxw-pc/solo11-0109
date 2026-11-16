@@ -13,29 +13,35 @@ def input_digest(db):
 def reconcile(path,window_id):
     db=connect(path);result={}
     with db:
-        db.execute("DELETE FROM issue WHERE code IN ('bad_state','window_ambiguous','rate_ambiguous','late_arrival')")
         window=db.execute('SELECT * FROM window WHERE id=?',(window_id,)).fetchone()
         if not window:raise ValueError('unknown_window')
         validate_window(window)
         windows=[dict(x) for x in db.execute('SELECT * FROM window')]
         events=[dict(x) for x in db.execute('SELECT * FROM transaction_event')]
         dig=input_digest(db)
+        db.execute("UPDATE reconcile_run SET status='已失效' WHERE window_id=? AND status='已归档' AND source_digest<>?",(window_id,dig))
         run=db.execute("INSERT INTO reconcile_run(window_id,status,source_digest) VALUES (?,'待接收',?)",(window_id,dig)).lastrowid
         db.execute("UPDATE reconcile_run SET status='已校验' WHERE id=?",(run,))
+        db.execute('INSERT INTO reconcile_issue(run_id,code,merchant,tx,detail) SELECT ?,code,merchant,tx,detail FROM issue',(run,))
+        def record(code,merchant,tx):
+            db.execute('INSERT INTO reconcile_issue(run_id,code,merchant,tx) VALUES (?,?,?,?)',(run,code,merchant,tx))
         aggregates={};unresolved=set()
         for (merchant,tx),items,confirmed,refunded,valid in transactions(events):
             try:wid=window_for(at(items[0]['business_at']),windows)
             except ValueError:
-                unresolved.add(merchant);db.execute('INSERT INTO issue(code,merchant,tx) VALUES (?,?,?)',('window_ambiguous',merchant,tx));continue
+                unresolved.add(merchant);record('window_ambiguous',merchant,tx);continue
             if wid!=window_id:continue
             if any(at(e['arrival_at'])>at(window['cutoff_at']) for e in items):
-                unresolved.add(merchant);db.execute('INSERT INTO issue(code,merchant,tx) VALUES (?,?,?)',('late_arrival',merchant,tx));continue
+                unresolved.add(merchant);record('late_arrival',merchant,tx);continue
             if not valid:
-                unresolved.add(merchant);db.execute('INSERT INTO issue(code,merchant,tx) VALUES (?,?,?)',('bad_state',merchant,tx));continue
+                unresolved.add(merchant);record('bad_state',merchant,tx);continue
             rates=[r for r in db.execute('SELECT * FROM rate_version WHERE merchant=?',(merchant,)) if at(r['start_at'])<=at(items[0]['business_at'])<at(r['end_at'])]
-            for rate in rates:validate_rate(rate)
+            try:
+                for rate in rates:validate_rate(rate)
+            except ValueError:
+                unresolved.add(merchant);record('rate_invalid',merchant,tx);continue
             if len(rates)!=1:
-                unresolved.add(merchant);db.execute('INSERT INTO issue(code,merchant,tx) VALUES (?,?,?)',('rate_ambiguous',merchant,tx));continue
+                unresolved.add(merchant);record('rate_ambiguous',merchant,tx);continue
             fee=(confirmed*Decimal(rates[0]['rate'])).quantize(Q,rounding=ROUND_HALF_UP)
             a=aggregates.setdefault(merchant,{'gross':Decimal(0),'fee':Decimal(0),'refund':Decimal(0),'ids':[]})
             a['gross']+=confirmed;a['fee']+=fee;a['refund']+=refunded;a['ids'] += [e['id'] for e in items]
@@ -49,7 +55,7 @@ def reconcile(path,window_id):
             batch_net=sum((Decimal(x['amount']) for x in lines),Decimal(0))
             adjustment=sum((Decimal(x['amount']) for x in db.execute('SELECT amount FROM adjustment WHERE window_id=? AND merchant=?',(window_id,merchant))),Decimal(0))
             for line in lines:db.execute('INSERT INTO evidence(run_id,merchant,batch_id,detail) VALUES (?,?,?,?)',(run,merchant,line['id'],'batch'))
-            issues=[r['code'] for r in db.execute('SELECT code FROM issue WHERE merchant=?',(merchant,))]
+            issues=[r['code'] for r in db.execute('SELECT code FROM reconcile_issue WHERE run_id=? AND merchant=?',(run,merchant))]
             if merchant in unresolved or issues:status='证据不足';reason=','.join(sorted(set(issues)))
             elif not lines:status='证据不足';reason='missing_batch'
             elif net+adjustment!=batch_net:status='差异';reason='amount_mismatch'

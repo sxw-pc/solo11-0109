@@ -13,12 +13,16 @@ def transactions(events):
     for e in events:groups[(e['merchant'],e['tx'])].append(e)
     for key,items in groups.items():
         items.sort(key=lambda e:(at(e['business_at']),e['version']))
-        confirmed=Decimal('0');refunded=Decimal('0');authorized=False;valid=True
+        confirmed=Decimal('0');refunded=Decimal('0');authorized=False;authorized_amount=Decimal('0');valid=True
         for e in items:
-            amount=Decimal(e['amount'])
-            if e['kind']=='authorize':authorized=True
+            try:amount=Decimal(e['amount'])
+            except Exception:valid=False;continue
+            if not amount.is_finite() or amount<=0:valid=False;continue
+            if e['kind']=='authorize':
+                if authorized or confirmed:valid=False
+                authorized=True;authorized_amount=amount
             elif e['kind']=='confirm':
-                if not authorized or confirmed:valid=False
+                if not authorized or confirmed or amount>authorized_amount:valid=False
                 confirmed=amount
             elif e['kind']=='cancel':
                 if not authorized or confirmed:valid=False

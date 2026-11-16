@@ -31,6 +31,20 @@ def test_repeat_and_conflict(tmp_path):
 def test_illegal_refund(tmp_path):
     db=setup(tmp_path);load(tmp_path,db,[event('authorize',1),event('confirm',2),event('refund',3,'120.00')])
     assert reconcile(db,'D1')[1]['M']=='证据不足'
+def test_invalid_money_and_overcapture_never_balance(tmp_path):
+    db=setup(tmp_path);load(tmp_path,db,[event('authorize',1,'100.00'),event('confirm',2,'150.00')],'148.50')
+    assert reconcile(db,'D1')[1]['M']=='证据不足'
+    db2=tmp_path/'negative.db';c=connect(db2)
+    with c:
+        c.execute("INSERT INTO window VALUES ('D1','2026-01-01T00:00:00+00:00','2026-01-02T00:00:00+00:00','2026-01-02T01:00:00+00:00',1)")
+        c.execute('INSERT INTO rate_version(merchant,start_at,end_at,rate) VALUES (?,?,?,?)',('M','2025-01-01T00:00:00+00:00','2027-01-01T00:00:00+00:00','0.01'))
+    load(tmp_path,db2,[event('authorize',1,'100.00'),event('confirm',2,'-10.00')],'-9.90')
+    assert reconcile(db2,'D1')[1]['M']=='证据不足'
+def test_negative_rate_does_not_create_false_seal(tmp_path):
+    db=setup(tmp_path,rate='-0.01');load(tmp_path,db,[event('authorize',1),event('confirm',2)],'101.00')
+    run,out=reconcile(db,'D1')
+    assert out['M']=='证据不足'
+    with pytest.raises(ValueError,match='not_closable'):close(db,run)
 def test_window_half_open_and_missing_timezone(tmp_path):
     db=setup(tmp_path);load(tmp_path,db,[event('authorize',1,time='2026-01-02T00:00:00+00:00'),event('confirm',2,time='2026-01-02T00:01:00+00:00')])
     assert reconcile(db,'D1')[1]['M']=='证据不足'
@@ -71,6 +85,31 @@ def test_late_arrival_and_input_change(tmp_path):
     assert out['M']=='可封账'
     with c:c.execute('UPDATE rate_version SET rate=?',('0.02',))
     with pytest.raises(ValueError,match='source_changed'):close(db,run)
+def test_archived_verdict_is_not_current_after_rate_change(tmp_path):
+    db=setup(tmp_path);load(tmp_path,db,[event('authorize',1),event('confirm',2)])
+    old,verdict=reconcile(db,'D1');assert verdict['M']=='可封账';close(db,old)
+    before=json.loads(write(db,old,tmp_path/'before').read_text(encoding='utf-8'))
+    assert before['run']['effective_status']=='已归档'
+    c=connect(db)
+    with c:c.execute('UPDATE rate_version SET rate=?',('0.02',))
+    stale=json.loads(write(db,old,tmp_path/'stale').read_text(encoding='utf-8'))
+    assert stale['run']['effective_status']=='已失效'
+    assert '证据已失效' in (tmp_path/'stale.md').read_text(encoding='utf-8')
+    new,new_verdict=reconcile(db,'D1')
+    assert new_verdict['M']=='差异'
+    assert connect(db).execute('SELECT status FROM reconcile_run WHERE id=?',(old,)).fetchone()[0]=='已失效'
+def test_reconcile_preserves_historical_issue_evidence(tmp_path):
+    db=setup(tmp_path);load(tmp_path,db,[event('authorize',1),event('confirm',2)])
+    c=connect(db)
+    with c:c.execute('DELETE FROM rate_version')
+    first,decision=reconcile(db,'D1');assert decision['M']=='证据不足'
+    with c:c.execute('INSERT INTO rate_version(merchant,start_at,end_at,rate) VALUES (?,?,?,?)',
+                     ('M','2025-01-01T00:00:00+00:00','2027-01-01T00:00:00+00:00','0.01'))
+    second,decision=reconcile(db,'D1');assert decision['M']=='可封账'
+    old=json.loads(write(db,first,tmp_path/'old').read_text(encoding='utf-8'))
+    new=json.loads(write(db,second,tmp_path/'new').read_text(encoding='utf-8'))
+    assert 'rate_ambiguous' in {x['code'] for x in old['issues']}
+    assert 'rate_ambiguous' not in {x['code'] for x in new['issues']}
 def test_rate_overlap_and_refund(tmp_path):
     db=setup(tmp_path);load(tmp_path,db,[event('authorize',1),event('confirm',2),event('refund',3,'10.00')],'89.00')
     assert reconcile(db,'D1')[1]['M']=='可封账'
