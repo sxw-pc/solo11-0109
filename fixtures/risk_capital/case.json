@@ -1,0 +1,10 @@
+{
+  "policy": "fixtures/risk_capital/policy.json",
+  "scenarios": "fixtures/risk_capital/scenarios.json",
+  "sha256": {
+    "fixtures/risk_capital/policy.json": "5fd42aad89cbb1e44810ac2a0945171fb4e2c47aa22257dcd99e3aa40c89a574",
+    "fixtures/risk_capital/scenarios.json": "d8970e1cc5d0dc574ac174a6b2870459c9bb1a9e5f840040cffafd613295ac29",
+    "fixtures/risk_capital/coupled_challenge.json": "d6b3bd5910d7ab04d4caa27c141665bb6ca07616406b85caa493580473fc7e42"
+  },
+  "challenge": "fixtures/risk_capital/coupled_challenge.json"
+}

@@ -1,0 +1,10 @@
+{
+  "scenarios": [
+    {"id": "ordinary", "losses": {"C-A": "0.00", "C-B": "0.00"}, "nominal_probability": "0.70", "probability_lower": "0.50", "probability_upper": "0.70"},
+    {"id": "claim_a", "losses": {"C-A": "40.00", "C-B": "0.00"}, "nominal_probability": "0.20", "probability_lower": "0.10", "probability_upper": "0.30"},
+    {"id": "joint_claim", "losses": {"C-A": "20.00", "C-B": "70.00"}, "nominal_probability": "0.10", "probability_lower": "0.05", "probability_upper": "0.25"}
+  ],
+  "coupled_probability_bounds": [
+    {"scenario_ids": ["claim_a", "joint_claim"], "minimum": "0.25", "maximum": "0.40"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "case_id": "M1-D1-tail-capital-01",
+  "merchant": "M1",
+  "window_id": "D1",
+  "alpha": "0.80",
+  "reserve_cases": [
+    {"case_id": "C-A", "amount": "30.00", "reason": "synthetic open claim A"},
+    {"case_id": "C-B", "amount": "50.00", "reason": "synthetic open claim B"}
+  ],
+  "contracts": ["nominal_cvar", "ambiguity_robust_cvar"],
+  "capital_scope": "merchant_pool",
+  "risk_unit": "currency_minor_unit"
+}
