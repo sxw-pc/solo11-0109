@@ -7,7 +7,7 @@ Q=Decimal('0.01')
 def money(x):return str(Decimal(x).quantize(Q,rounding=ROUND_HALF_UP))
 def input_digest(db):
     rows=[]
-    for table,cols in [('transaction_event','sha,business_at,arrival_at'),('batch_line','id,amount,corrects'),('rate_version','merchant,start_at,end_at,rate'),('adjustment','window_id,merchant,amount,reason'),('window','id,start_at,end_at,cutoff_at,version')]:
+    for table,cols in [('transaction_event','sha,business_at,arrival_at,clearing_group'),('batch_line','id,amount,corrects,ref_kind,ref_value'),('rate_version','merchant,start_at,end_at,rate'),('adjustment','window_id,merchant,amount,reason'),('window','id,start_at,end_at,cutoff_at,version'),('billing_contract','merchant,reference_semantics,sha')]:
         rows.append((table,[tuple(r) for r in db.execute(f'SELECT {cols} FROM {table} ORDER BY 1,2')]))
     return hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()
 def reconcile(path,window_id):
