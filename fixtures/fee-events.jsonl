@@ -1,0 +1,4 @@
+{"merchant":"M1","tx":"T1","version":1,"kind":"authorize","amount":"1.00","business_at":"2026-01-01T08:00:00Z"}
+{"merchant":"M1","tx":"T1","version":2,"kind":"confirm","amount":"1.00","business_at":"2026-01-01T08:01:00Z"}
+{"merchant":"M1","tx":"T2","version":1,"kind":"authorize","amount":"1.00","business_at":"2026-01-01T09:00:00Z"}
+{"merchant":"M1","tx":"T2","version":2,"kind":"confirm","amount":"1.00","business_at":"2026-01-01T09:01:00Z"}
