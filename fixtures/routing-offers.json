@@ -1,0 +1,11 @@
+{
+  "cycle_id": "D2",
+  "orders": [
+    {"tx_id": "N1", "merchant": "M1", "amount_cents": 10000, "submitted_at": "2026-01-02T08:00:00Z"},
+    {"tx_id": "N2", "merchant": "M1", "amount_cents": 10000, "submitted_at": "2026-01-02T08:01:00Z"}
+  ],
+  "gateways": [
+    {"gateway_id": "economy", "capacity": 2, "activation_cents": 30, "rate_bps_by_unit": [100, 40], "latency_hours": 48},
+    {"gateway_id": "express", "capacity": 1, "activation_cents": 0, "rate_bps_by_unit": [100], "latency_hours": 0}
+  ]
+}

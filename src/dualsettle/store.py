@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS reserve_release(id INTEGER PRIMARY KEY,case_id TEXT N
 CREATE TABLE IF NOT EXISTS allocation_agreement(id TEXT PRIMARY KEY,merchant TEXT NOT NULL,beneficiary TEXT NOT NULL,share TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS payout_plan(id INTEGER PRIMARY KEY,run_id INTEGER NOT NULL REFERENCES reconcile_run(id),merchant TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,input_digest TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payout_line(plan_id INTEGER REFERENCES payout_plan(id),beneficiary TEXT,amount TEXT,PRIMARY KEY(plan_id,beneficiary));
+CREATE TABLE IF NOT EXISTS routing_batch(id TEXT PRIMARY KEY,cycle_id TEXT NOT NULL,source_hash TEXT NOT NULL,raw BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS routing_order(batch_id TEXT NOT NULL REFERENCES routing_batch(id),tx_id TEXT NOT NULL,merchant TEXT NOT NULL REFERENCES account(id),amount_cents INTEGER NOT NULL,submitted_at TEXT NOT NULL,PRIMARY KEY(batch_id,tx_id));
+CREATE TABLE IF NOT EXISTS routing_gateway(batch_id TEXT NOT NULL REFERENCES routing_batch(id),gateway_id TEXT NOT NULL,capacity INTEGER NOT NULL,activation_cents INTEGER NOT NULL,rate_bps_json TEXT NOT NULL,latency_hours INTEGER NOT NULL,PRIMARY KEY(batch_id,gateway_id));
 """
 def connect(path):
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True)
