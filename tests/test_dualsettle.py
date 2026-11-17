@@ -4,6 +4,15 @@ from dualsettle.store import connect
 from dualsettle.ingest import stream,batch
 from dualsettle.rules import reconcile,close
 from dualsettle.report import write
+from dualsettle.review import register_reviewer,submit_reconciliation,freeze_contract,sign_review
+def authorize(db,run,route='standard'):
+    register_reviewer(db,'submitter','核对员甲',['finance'])
+    register_reviewer(db,'reviewer-a','财务审核乙',['finance'])
+    register_reviewer(db,'reviewer-b','运营审核丙',['operations'])
+    submit_reconciliation(db,run,'submitter')
+    freeze_contract(db,run,route,'submitter','书面审核合同')
+    sign_review(db,run,'reviewer-a','finance','agree','金额与冻结证据一致')
+    sign_review(db,run,'reviewer-b','operations','agree','批次与实时轨一致')
 def setup(tmp,rate='0.01'):
     db=tmp/'x.db';c=connect(db)
     with c:
@@ -21,7 +30,7 @@ def load(tmp,db,events,batch_amount='99.00'):
 def test_matched_close_and_evidence(tmp_path):
     db=setup(tmp_path);load(tmp_path,db,[event('authorize',1),event('confirm',2)])
     run,out=reconcile(db,'D1');assert out=={'M':'可封账'}
-    close(db,run);data=json.loads(write(db,run,tmp_path/'out').read_text(encoding='utf-8'))
+    authorize(db,run);close(db,run);data=json.loads(write(db,run,tmp_path/'out').read_text(encoding='utf-8'))
     assert data['verdicts'][0]['stream_net']=='99.00' and len(data['evidence'])==3
 def test_repeat_and_conflict(tmp_path):
     db=setup(tmp_path);load(tmp_path,db,[event('authorize',1),event('confirm',2)])
@@ -87,7 +96,7 @@ def test_late_arrival_and_input_change(tmp_path):
     with pytest.raises(ValueError,match='source_changed'):close(db,run)
 def test_archived_verdict_is_not_current_after_rate_change(tmp_path):
     db=setup(tmp_path);load(tmp_path,db,[event('authorize',1),event('confirm',2)])
-    old,verdict=reconcile(db,'D1');assert verdict['M']=='可封账';close(db,old)
+    old,verdict=reconcile(db,'D1');assert verdict['M']=='可封账';authorize(db,old);close(db,old)
     before=json.loads(write(db,old,tmp_path/'before').read_text(encoding='utf-8'))
     assert before['run']['effective_status']=='已归档'
     c=connect(db)

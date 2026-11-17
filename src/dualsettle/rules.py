@@ -64,10 +64,23 @@ def reconcile(path,window_id):
         db.execute("UPDATE reconcile_run SET status=?,ended_at=CURRENT_TIMESTAMP WHERE id=?",('待核' if any(v!='可封账' for v in result.values()) else '已判定',run))
     db.close();return run,result
 def close(path,run):
+    """Archive a judged run only after the review ledger authorizes it.
+
+    Amount equality alone is never sufficient: the frozen review contract and
+    its append-only signatures must show who authorized this exact frozen
+    evidence.  Review refusals are raised as review reasons, never as amount
+    differences, and this function does not touch stream aggregates, batch
+    lines, or verdicts.
+    """
+    from .review import authorization_for_run
     db=connect(path)
-    with db:
-        r=db.execute('SELECT * FROM reconcile_run WHERE id=?',(run,)).fetchone()
-        if not r or r['status']!='已判定':raise ValueError('not_closable')
-        if input_digest(db)!=r['source_digest']:raise ValueError('source_changed')
-        db.execute("UPDATE reconcile_run SET status='已归档' WHERE id=?",(run,))
-    db.close()
+    try:
+        with db:
+            r=db.execute('SELECT * FROM reconcile_run WHERE id=?',(run,)).fetchone()
+            if not r or r['status']!='已判定':raise ValueError('not_closable')
+            if input_digest(db)!=r['source_digest']:raise ValueError('source_changed')
+            authorization=authorization_for_run(db,run)
+            if not authorization['authorized']:
+                raise ValueError(authorization['reason'])
+            db.execute("UPDATE reconcile_run SET status='已归档' WHERE id=?",(run,))
+    finally:db.close()
