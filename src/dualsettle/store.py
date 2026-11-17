@@ -4,15 +4,21 @@ SCHEMA="""
 PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS account(id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS source_file(id INTEGER PRIMARY KEY,path TEXT,sha TEXT UNIQUE,raw BLOB);
-CREATE TABLE IF NOT EXISTS transaction_event(id INTEGER PRIMARY KEY,source_id INTEGER REFERENCES source_file(id),line_no INTEGER,merchant TEXT,tx TEXT,version INTEGER,kind TEXT,amount TEXT,business_at TEXT,arrival_at TEXT,sha TEXT,raw TEXT,UNIQUE(merchant,tx,version));
+CREATE TABLE IF NOT EXISTS transaction_event(id INTEGER PRIMARY KEY,source_id INTEGER REFERENCES source_file(id),line_no INTEGER,merchant TEXT,tx TEXT,version INTEGER,kind TEXT,amount TEXT,currency TEXT,business_at TEXT,arrival_at TEXT,sha TEXT,raw TEXT,UNIQUE(merchant,tx,version));
 CREATE TABLE IF NOT EXISTS rate_version(id INTEGER PRIMARY KEY,merchant TEXT,start_at TEXT,end_at TEXT,rate TEXT);
+CREATE TABLE IF NOT EXISTS merchant_currency(merchant TEXT PRIMARY KEY,currency TEXT NOT NULL,source TEXT,digest TEXT);
+CREATE TABLE IF NOT EXISTS fx_rate_version(id INTEGER PRIMARY KEY,base TEXT NOT NULL,quote TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,quote_rate TEXT NOT NULL,source TEXT,digest TEXT,UNIQUE(base,quote,start_at,end_at));
+CREATE TABLE IF NOT EXISTS settlement_agreement(id INTEGER PRIMARY KEY,merchant TEXT NOT NULL,route TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,version INTEGER NOT NULL,source TEXT,digest TEXT,UNIQUE(merchant,start_at,end_at,version));
+CREATE TABLE IF NOT EXISTS frozen_contract(merchant TEXT NOT NULL,window_id TEXT NOT NULL,agreement_id INTEGER NOT NULL REFERENCES settlement_agreement(id),route TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(merchant,window_id));
 CREATE TABLE IF NOT EXISTS window(id TEXT PRIMARY KEY,start_at TEXT,end_at TEXT,cutoff_at TEXT,version INTEGER);
-CREATE TABLE IF NOT EXISTS stream_aggregate(window_id TEXT,merchant TEXT,gross TEXT,fee TEXT,refund TEXT,net TEXT,event_ids TEXT,PRIMARY KEY(window_id,merchant));
+CREATE TABLE IF NOT EXISTS stream_aggregate(window_id TEXT,merchant TEXT,gross TEXT,fee TEXT,refund TEXT,net TEXT,event_ids TEXT,currency TEXT,fx_detail TEXT,PRIMARY KEY(window_id,merchant));
 CREATE TABLE IF NOT EXISTS batch_line(id TEXT PRIMARY KEY,window_id TEXT,merchant TEXT,amount TEXT,corrects TEXT,source_id INTEGER REFERENCES source_file(id));
 CREATE TABLE IF NOT EXISTS adjustment(id INTEGER PRIMARY KEY,window_id TEXT,merchant TEXT,amount TEXT,reason TEXT);
 CREATE TABLE IF NOT EXISTS reconcile_run(id INTEGER PRIMARY KEY,window_id TEXT,status TEXT,source_digest TEXT,started_at TEXT DEFAULT CURRENT_TIMESTAMP,ended_at TEXT);
-CREATE TABLE IF NOT EXISTS evidence(id INTEGER PRIMARY KEY,run_id INTEGER REFERENCES reconcile_run(id),merchant TEXT,event_id INTEGER REFERENCES transaction_event(id),batch_id TEXT,rate_id INTEGER REFERENCES rate_version(id),detail TEXT);
+CREATE TABLE IF NOT EXISTS evidence(id INTEGER PRIMARY KEY,run_id INTEGER REFERENCES reconcile_run(id),merchant TEXT,event_id INTEGER REFERENCES transaction_event(id),batch_id TEXT,rate_id INTEGER REFERENCES rate_version(id),fx_rate_id INTEGER REFERENCES fx_rate_version(id),fx_role TEXT,fx_detail TEXT,detail TEXT);
 CREATE TABLE IF NOT EXISTS verdict(run_id INTEGER REFERENCES reconcile_run(id),merchant TEXT,status TEXT,stream_net TEXT,batch_net TEXT,reason TEXT,PRIMARY KEY(run_id,merchant));
+CREATE TABLE IF NOT EXISTS run_transaction(run_id INTEGER REFERENCES reconcile_run(id),window_id TEXT,merchant TEXT,tx TEXT,detail TEXT,PRIMARY KEY(run_id,merchant,tx));
+CREATE TABLE IF NOT EXISTS run_aggregate(run_id INTEGER REFERENCES reconcile_run(id),window_id TEXT,merchant TEXT,gross TEXT,fee TEXT,refund TEXT,net TEXT,event_ids TEXT,currency TEXT,PRIMARY KEY(run_id,merchant));
 CREATE TABLE IF NOT EXISTS issue(id INTEGER PRIMARY KEY,code TEXT,merchant TEXT,tx TEXT,detail TEXT);
 CREATE TABLE IF NOT EXISTS reconcile_issue(id INTEGER PRIMARY KEY,run_id INTEGER NOT NULL REFERENCES reconcile_run(id),code TEXT NOT NULL,merchant TEXT,tx TEXT,detail TEXT);
 CREATE TABLE IF NOT EXISTS reserve_case(id TEXT PRIMARY KEY,merchant TEXT NOT NULL,window_id TEXT NOT NULL REFERENCES window(id),amount TEXT NOT NULL,reason TEXT NOT NULL);
@@ -21,6 +27,29 @@ CREATE TABLE IF NOT EXISTS allocation_agreement(id TEXT PRIMARY KEY,merchant TEX
 CREATE TABLE IF NOT EXISTS payout_plan(id INTEGER PRIMARY KEY,run_id INTEGER NOT NULL REFERENCES reconcile_run(id),merchant TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,input_digest TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payout_line(plan_id INTEGER REFERENCES payout_plan(id),beneficiary TEXT,amount TEXT,PRIMARY KEY(plan_id,beneficiary));
 """
+
+# Columns introduced after the first on-disk schema.  Existing databases are
+# upgraded in place so old fixtures keep their rows (and old runs keep their
+# frozen evidence) while the new currency dimensions become available.
+MIGRATIONS=[
+    ('transaction_event','currency','TEXT'),
+    ('stream_aggregate','currency','TEXT'),
+    ('stream_aggregate','fx_detail','TEXT'),
+    ('evidence','fx_rate_id','INTEGER REFERENCES fx_rate_version(id)'),
+    ('evidence','fx_role','TEXT'),
+    ('evidence','fx_detail','TEXT'),
+]
+
+
+def _migrate(db):
+    for table,column,decl in MIGRATIONS:
+        columns={row['name'] for row in db.execute(f'PRAGMA table_info({table})')}
+        if column not in columns:
+            db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {decl}')
+
+
 def connect(path):
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True)
-    db=sqlite3.connect(p);db.row_factory=sqlite3.Row;db.executescript(SCHEMA);return db
+    db=sqlite3.connect(p);db.row_factory=sqlite3.Row;db.executescript(SCHEMA)
+    _migrate(db);db.commit()
+    return db
