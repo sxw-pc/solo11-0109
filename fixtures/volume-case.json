@@ -1,0 +1,1 @@
+{"baseline_window":"B","target_window":"T","baseline_days":1,"target_days":1,"focus_merchant":"M1","synthetic_counts":{"B":{"M1":10,"M2":90},"T":{"M1":30,"M2":270}}}
