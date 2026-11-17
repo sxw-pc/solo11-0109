@@ -1,0 +1,12 @@
+{"merchant":"M-refund","tx":"T1","version":1,"kind":"authorize","amount":"100.00","business_at":"2030-06-01T00:00:00Z"}
+{"merchant":"M-refund","tx":"T1","version":2,"kind":"confirm","amount":"100.00","business_at":"2030-06-01T00:00:00Z"}
+{"merchant":"M-refund","tx":"T1","version":3,"kind":"refund","amount":"20.00","business_at":"2030-06-02T00:00:00Z"}
+{"merchant":"M-refund","tx":"T1","version":4,"kind":"refund","amount":"80.00","business_at":"2030-06-04T00:00:00Z"}
+{"merchant":"M-refund","tx":"T2","version":1,"kind":"authorize","amount":"100.00","business_at":"2030-06-01T00:00:00Z"}
+{"merchant":"M-refund","tx":"T2","version":2,"kind":"confirm","amount":"100.00","business_at":"2030-06-01T00:00:00Z"}
+{"merchant":"M-refund","tx":"T2","version":3,"kind":"refund","amount":"50.00","business_at":"2030-06-03T00:00:00Z"}
+{"merchant":"M-refund","tx":"T3","version":1,"kind":"authorize","amount":"100.00","business_at":"2030-06-03T00:00:00Z"}
+{"merchant":"M-refund","tx":"T3","version":2,"kind":"confirm","amount":"100.00","business_at":"2030-06-03T00:00:00Z"}
+{"merchant":"M-refund","tx":"T4","version":1,"kind":"authorize","amount":"100.00","business_at":"2030-06-01T00:00:00Z"}
+{"merchant":"M-refund","tx":"T4","version":2,"kind":"confirm","amount":"100.00","business_at":"2030-06-01T00:00:00Z"}
+{"merchant":"M-refund","tx":"T4","version":3,"kind":"refund","amount":"100.00","business_at":"2030-06-02T00:00:00Z"}

@@ -1,0 +1,1 @@
+{"merchant":"M-refund","transactions":["T1","T2","T3","T4"],"as_of":"2030-06-05T00:00:00Z","horizons_days":[1,2,3],"allowed_endpoints":["first_refund","fully_refunded"]}

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS reserve_release(id INTEGER PRIMARY KEY,case_id TEXT N
 CREATE TABLE IF NOT EXISTS allocation_agreement(id TEXT PRIMARY KEY,merchant TEXT NOT NULL,beneficiary TEXT NOT NULL,share TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS payout_plan(id INTEGER PRIMARY KEY,run_id INTEGER NOT NULL REFERENCES reconcile_run(id),merchant TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,input_digest TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payout_line(plan_id INTEGER REFERENCES payout_plan(id),beneficiary TEXT,amount TEXT,PRIMARY KEY(plan_id,beneficiary));
+CREATE TABLE IF NOT EXISTS refund_cohort_case(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
 """
 def connect(path):
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True)
