@@ -3,6 +3,7 @@ from decimal import Decimal,ROUND_HALF_UP
 from .store import connect
 from .timeline import at,window_for,transactions
 from .contract import validate_window,validate_rate
+from .ingest import visible_events,incomplete_imports
 Q=Decimal('0.01')
 def money(x):return str(Decimal(x).quantize(Q,rounding=ROUND_HALF_UP))
 def input_digest(db):
@@ -10,21 +11,34 @@ def input_digest(db):
     for table,cols in [('transaction_event','sha,business_at,arrival_at'),('batch_line','id,amount,corrects'),('rate_version','merchant,start_at,end_at,rate'),('adjustment','window_id,merchant,amount,reason'),('window','id,start_at,end_at,cutoff_at,version')]:
         rows.append((table,[tuple(r) for r in db.execute(f'SELECT {cols} FROM {table} ORDER BY 1,2')]))
     return hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()
-def reconcile(path,window_id):
+def reconcile(path,window_id,preview=False):
     db=connect(path);result={}
     with db:
         window=db.execute('SELECT * FROM window WHERE id=?',(window_id,)).fetchone()
         if not window:raise ValueError('unknown_window')
         validate_window(window)
         windows=[dict(x) for x in db.execute('SELECT * FROM window')]
-        events=[dict(x) for x in db.execute('SELECT * FROM transaction_event')]
+        # Visibility is driven by durable import progress: whole-file runs
+        # contribute nothing before completion; segment runs may contribute
+        # verified segments only inside an explicitly non-sealing preview.
+        events=visible_events(db,preview=preview)
         dig=input_digest(db)
         db.execute("UPDATE reconcile_run SET status='已失效' WHERE window_id=? AND status='已归档' AND source_digest<>?",(window_id,dig))
-        run=db.execute("INSERT INTO reconcile_run(window_id,status,source_digest) VALUES (?,'待接收',?)",(window_id,dig)).lastrowid
+        run=db.execute("INSERT INTO reconcile_run(window_id,status,source_digest,mode,preview,sealable) VALUES (?,'待接收',?,?,?,?)",
+                       (window_id,dig,'preview' if preview else 'formal',1 if preview else 0,0 if preview else 1)).lastrowid
         db.execute("UPDATE reconcile_run SET status='已校验' WHERE id=?",(run,))
         db.execute('INSERT INTO reconcile_issue(run_id,code,merchant,tx,detail) SELECT ?,code,merchant,tx,detail FROM issue',(run,))
-        def record(code,merchant,tx):
-            db.execute('INSERT INTO reconcile_issue(run_id,code,merchant,tx) VALUES (?,?,?,?)',(run,code,merchant,tx))
+        def record(code,merchant,tx,detail=None):
+            db.execute('INSERT INTO reconcile_issue(run_id,code,merchant,tx,detail) VALUES (?,?,?,?,?)',(run,code,merchant,tx,detail))
+        # Unfinished imports are causal inputs to the close decision. A
+        # reconcile can never seal while a source is still in flight, and a
+        # preview reconcile is never sealable even if every merchant matches.
+        sealable=not preview
+        for imp in incomplete_imports(db):
+            code='source_quarantined' if imp['status']=='quarantined' else 'source_incomplete'
+            record(code,None,None,f"import_run {imp['id']} {imp['path']} {imp['status']} accept={imp['accept_policy']}")
+            sealable=False
+        if preview:record('preview_not_sealable',None,None,'segment preview; close is rejected until the source completes')
         aggregates={};unresolved=set()
         for (merchant,tx),items,confirmed,refunded,valid in transactions(events):
             try:wid=window_for(at(items[0]['business_at']),windows)
@@ -61,13 +75,17 @@ def reconcile(path,window_id):
             elif net+adjustment!=batch_net:status='差异';reason='amount_mismatch'
             else:status='可封账';reason='matched'
             db.execute('INSERT INTO verdict VALUES (?,?,?,?,?,?)',(run,merchant,status,money(net),money(batch_net),reason));result[merchant]=status
-        db.execute("UPDATE reconcile_run SET status=?,ended_at=CURRENT_TIMESTAMP WHERE id=?",('待核' if any(v!='可封账' for v in result.values()) else '已判定',run))
+        db.execute('UPDATE reconcile_run SET sealable=? WHERE id=?',(1 if sealable else 0,run))
+        decidable=sealable and all(v=='可封账' for v in result.values())
+        db.execute("UPDATE reconcile_run SET status=?,ended_at=CURRENT_TIMESTAMP WHERE id=?",('待核' if not decidable else '已判定',run))
     db.close();return run,result
 def close(path,run):
     db=connect(path)
     with db:
         r=db.execute('SELECT * FROM reconcile_run WHERE id=?',(run,)).fetchone()
-        if not r or r['status']!='已判定':raise ValueError('not_closable')
+        if not r:raise ValueError('not_closable')
+        if r['preview'] or not r['sealable']:raise ValueError('not_sealable_preview')
+        if r['status']!='已判定':raise ValueError('not_closable')
         if input_digest(db)!=r['source_digest']:raise ValueError('source_changed')
         db.execute("UPDATE reconcile_run SET status='已归档' WHERE id=?",(run,))
     db.close()

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Offline sandbox shim: the image only ships python3, no pip/venv and no
+# pytest. The repo keeps a stdlib-only pytest shim under tools/pytest_shim
+# and its package under src/; put both on the path so the documented
+# `python -m pytest -q` and `python -m dualsettle demo` commands work.
+REPO=/workspace
+export PYTHONPATH="$REPO/tools/pytest_shim:$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 "$@"

@@ -20,7 +20,57 @@ CREATE TABLE IF NOT EXISTS reserve_release(id INTEGER PRIMARY KEY,case_id TEXT N
 CREATE TABLE IF NOT EXISTS allocation_agreement(id TEXT PRIMARY KEY,merchant TEXT NOT NULL,beneficiary TEXT NOT NULL,share TEXT NOT NULL,start_at TEXT NOT NULL,end_at TEXT NOT NULL,version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS payout_plan(id INTEGER PRIMARY KEY,run_id INTEGER NOT NULL REFERENCES reconcile_run(id),merchant TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,input_digest TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payout_line(plan_id INTEGER REFERENCES payout_plan(id),beneficiary TEXT,amount TEXT,PRIMARY KEY(plan_id,beneficiary));
+CREATE TABLE IF NOT EXISTS import_run(
+  id INTEGER PRIMARY KEY,
+  source_id INTEGER NOT NULL REFERENCES source_file(id),
+  mode TEXT NOT NULL,
+  accept_policy TEXT NOT NULL,
+  status TEXT NOT NULL,
+  path TEXT NOT NULL,
+  total_bytes INTEGER NOT NULL,
+  next_line_no INTEGER NOT NULL,
+  whole_sha TEXT,
+  duplicate_of INTEGER REFERENCES import_run(id),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  finished_at TEXT,
+  error_code TEXT,
+  error_detail TEXT
+);
+CREATE TABLE IF NOT EXISTS source_segment(
+  id INTEGER PRIMARY KEY,
+  import_id INTEGER NOT NULL REFERENCES import_run(id),
+  seq INTEGER NOT NULL,
+  byte_start INTEGER NOT NULL,
+  byte_end INTEGER NOT NULL,
+  line_start INTEGER NOT NULL,
+  line_end INTEGER NOT NULL,
+  byte_sha TEXT NOT NULL,
+  event_ids TEXT NOT NULL,
+  issue_ids TEXT NOT NULL,
+  raw BLOB NOT NULL,
+  UNIQUE(import_id,seq)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_import_run_active
+  ON import_run(path,mode) WHERE status IN ('in_progress','quarantined');
 """
+# Additive migrations for databases created before resumable ingest.
+_MIGRATIONS=[
+ ("reconcile_run","mode","ALTER TABLE reconcile_run ADD COLUMN mode TEXT NOT NULL DEFAULT 'formal'"),
+ ("reconcile_run","preview","ALTER TABLE reconcile_run ADD COLUMN preview INTEGER NOT NULL DEFAULT 0"),
+ ("reconcile_run","sealable","ALTER TABLE reconcile_run ADD COLUMN sealable INTEGER NOT NULL DEFAULT 1"),
+ ("transaction_event","import_id","ALTER TABLE transaction_event ADD COLUMN import_id INTEGER REFERENCES import_run(id)"),
+ ("transaction_event","segment_id","ALTER TABLE transaction_event ADD COLUMN segment_id INTEGER REFERENCES source_segment(id)"),
+ ("issue","import_id","ALTER TABLE issue ADD COLUMN import_id INTEGER REFERENCES import_run(id)"),
+ ("issue","segment_id","ALTER TABLE issue ADD COLUMN segment_id INTEGER REFERENCES source_segment(id)"),
+ ("issue","line_no","ALTER TABLE issue ADD COLUMN line_no INTEGER"),
+]
+def _migrate(db):
+    for table,column,stmt in _MIGRATIONS:
+        cols={r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
+        if column not in cols:db.execute(stmt)
 def connect(path):
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True)
-    db=sqlite3.connect(p);db.row_factory=sqlite3.Row;db.executescript(SCHEMA);return db
+    db=sqlite3.connect(p);db.row_factory=sqlite3.Row
+    db.execute('PRAGMA foreign_keys=ON')
+    db.executescript(SCHEMA);_migrate(db);db.commit()
+    return db
