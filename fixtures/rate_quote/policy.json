@@ -1,0 +1,12 @@
+{
+  "case_id": "merchant-rate-quote-01",
+  "benchmark_window_id": "D1",
+  "quote_window_id": "D2",
+  "current_rates": {"M1": "0.0100", "M2": "0.0100"},
+  "allowed_rate_min": "0.0100",
+  "allowed_rate_max": "0.0200",
+  "target_fee": "0.06",
+  "amendment_weights": {"M1": "10", "M2": "1"},
+  "contracts": ["minimax_rate_delta", "weighted_amendment_delta"],
+  "rounding": "per_confirmed_transaction_half_up_cent"
+}

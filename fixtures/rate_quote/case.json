@@ -1,0 +1,10 @@
+{
+  "policy": "fixtures/rate_quote/policy.json",
+  "events": "fixtures/rate_quote/events.jsonl",
+  "batch": "fixtures/rate_quote/batch.csv",
+  "sha256": {
+    "fixtures/rate_quote/policy.json": "b04bc7918049fb0a545031697bb19dca53f2c99b4fe5001c9445ed11b99bd547",
+    "fixtures/rate_quote/events.jsonl": "0879ffdbb50ac55a7c86491cd515e47351a88e916fc9a7c1e5f5cc319891e053",
+    "fixtures/rate_quote/batch.csv": "513827ce1f6361343cc8dabf930957c8de46fa7025c4ba0c6406a474dcc9818c"
+  }
+}
